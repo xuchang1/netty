@@ -37,11 +37,25 @@ import static io.netty.util.internal.ObjectUtil.checkPositiveOrZero;
  */
 public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
 
+    /**
+     * ByteBuf 分配器对象
+     */
     private final ByteBufAllocator alloc;
 
+    /**
+     * 数据 ByteBuffer 对象
+     */
     ByteBuffer buffer; // accessed by UnpooledUnsafeNoCleanerDirectByteBuf.reallocateDirect()
+
+    /**
+     * 临时 ByteBuffer 对象
+     */
     private ByteBuffer tmpNioBuf;
     private int capacity;
+
+    /**
+     * 是否需要释放
+     */
     private boolean doNotFree;
 
     /**
@@ -61,6 +75,8 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
         }
 
         this.alloc = alloc;
+        // 创建 Direct ByteBuffer 对象
+        // 设置数据 ByteBuffer 对象
         setByteBuffer(allocateDirect(initialCapacity), false);
     }
 
@@ -85,6 +101,7 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
             throw new IllegalArgumentException("initialBuffer is a read-only buffer.");
         }
 
+        // 获得剩余可读字节数，作为初始容量大小
         int initialCapacity = initialBuffer.remaining();
         if (initialCapacity > maxCapacity) {
             throw new IllegalArgumentException(String.format(
@@ -92,8 +109,12 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
         }
 
         this.alloc = alloc;
+        // 标记为 true 。因为 initialBuffer 是从外部传递进来，释放的工作，不交给当前 UnpooledDirectByteBuf 对象。
         doNotFree = !doFree;
+        // slice 切片
+        // 设置数据 ByteBuffer 对象
         setByteBuffer((slice ? initialBuffer.slice() : initialBuffer).order(ByteOrder.BIG_ENDIAN), false);
+        // 设置写索引
         writerIndex(initialCapacity);
     }
 
@@ -115,9 +136,11 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
         if (tryFree) {
             ByteBuffer oldBuffer = this.buffer;
             if (oldBuffer != null) {
+                // 标记为 false 。因为设置的 ByteBuffer 对象，是 UnpooledDirectByteBuf 自己创建的
                 if (doNotFree) {
                     doNotFree = false;
                 } else {
+                    // 释放老的 buffer 对象
                     freeDirect(oldBuffer);
                 }
             }
@@ -142,13 +165,18 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
     public ByteBuf capacity(int newCapacity) {
         checkNewCapacity(newCapacity);
         int oldCapacity = capacity;
+        // 没变直接返回
         if (newCapacity == oldCapacity) {
             return this;
         }
+
+        // 只保留需要复制部分的字节数
         int bytesToCopy;
+        // 扩容
         if (newCapacity > oldCapacity) {
             bytesToCopy = oldCapacity;
         } else {
+            // 缩容
             trimIndicesToCapacity(newCapacity);
             bytesToCopy = newCapacity;
         }
@@ -640,8 +668,10 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
             return;
         }
 
+        // 置为 null
         this.buffer = null;
 
+        // 释放 buffer 对象
         if (!doNotFree) {
             freeDirect(buffer);
         }

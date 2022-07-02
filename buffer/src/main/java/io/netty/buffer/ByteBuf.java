@@ -260,6 +260,7 @@ public abstract class ByteBuf implements ReferenceCounted, Comparable<ByteBuf> {
      *
      * @throws IllegalArgumentException if the {@code newCapacity} is greater than {@link #maxCapacity()}
      */
+    // 扩容或缩容
     public abstract ByteBuf capacity(int newCapacity);
 
     /**
@@ -2167,6 +2168,8 @@ public abstract class ByteBuf implements ReferenceCounted, Comparable<ByteBuf> {
     public abstract ByteBuf copy();
 
     /**
+     * 深拷贝
+     *
      * Returns a copy of this buffer's sub-region.  Modifying the content of
      * the returned buffer or this buffer does not affect each other at all.
      * This method does not modify {@code readerIndex} or {@code writerIndex} of
@@ -2175,6 +2178,8 @@ public abstract class ByteBuf implements ReferenceCounted, Comparable<ByteBuf> {
     public abstract ByteBuf copy(int index, int length);
 
     /**
+     * 浅拷贝，拥有独立的读写索引
+     *
      * Returns a slice of this buffer's readable bytes. Modifying the content
      * of the returned buffer or this buffer affects each other's content
      * while they maintain separate indexes and marks.  This method is
@@ -2227,6 +2232,8 @@ public abstract class ByteBuf implements ReferenceCounted, Comparable<ByteBuf> {
     public abstract ByteBuf retainedSlice(int index, int length);
 
     /**
+     * 浅拷贝，复制的整个字节数组
+     *
      * Returns a buffer which shares the whole region of this buffer.
      * Modifying the content of the returned buffer or this buffer affects
      * each other's content while they maintain separate indexes and marks.

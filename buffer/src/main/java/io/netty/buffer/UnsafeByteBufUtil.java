@@ -32,6 +32,7 @@ import static io.netty.util.internal.PlatformDependent.BIG_ENDIAN_NATIVE_ORDER;
  * All operations get and set as {@link ByteOrder#BIG_ENDIAN}.
  */
 final class UnsafeByteBufUtil {
+    // 当前平台是否支持非对齐访问
     private static final boolean UNALIGNED = PlatformDependent.isUnaligned();
     private static final byte ZERO = 0;
 
@@ -177,8 +178,10 @@ final class UnsafeByteBufUtil {
 
     static void setInt(long address, int value) {
         if (UNALIGNED) {
+            // 非对齐直接设置(大端 or 小端)
             PlatformDependent.putInt(address, BIG_ENDIAN_NATIVE_ORDER ? value : Integer.reverseBytes(value));
         } else {
+            // 对齐的必须每个 byte 设置
             PlatformDependent.putByte(address, (byte) (value >>> 24));
             PlatformDependent.putByte(address + 1, (byte) (value >>> 16));
             PlatformDependent.putByte(address + 2, (byte) (value >>> 8));
@@ -433,9 +436,11 @@ final class UnsafeByteBufUtil {
 
     static ByteBuf copy(AbstractByteBuf buf, long addr, int index, int length) {
         buf.checkIndex(index, length);
+        // 分配一个 direct ByteBuf
         ByteBuf copy = buf.alloc().directBuffer(length, buf.maxCapacity());
         if (length != 0) {
             if (copy.hasMemoryAddress()) {
+                // unsafe 数据复制
                 PlatformDependent.copyMemory(addr, copy.memoryAddress(), length);
                 copy.setIndex(0, length);
             } else {

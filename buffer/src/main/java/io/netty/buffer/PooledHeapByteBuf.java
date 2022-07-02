@@ -211,13 +211,16 @@ class PooledHeapByteBuf extends PooledByteBuf<byte[]> {
     @Override
     public final ByteBuf copy(int index, int length) {
         checkIndex(index, length);
+        // 创建一个 Heap ByteBuf 对象
         ByteBuf copy = alloc().heapBuffer(length, maxCapacity());
+        // 写入数据
         return copy.writeBytes(memory, idx(index), length);
     }
 
     @Override
     final ByteBuffer duplicateInternalNioBuffer(int index, int length) {
         checkIndex(index, length);
+        // 创建 ByteBuffer 对象
         return ByteBuffer.wrap(memory, idx(index), length).slice();
     }
 

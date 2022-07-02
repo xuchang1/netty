@@ -21,6 +21,7 @@ import java.nio.ByteBuffer;
 
 final class WrappedUnpooledUnsafeDirectByteBuf extends UnpooledUnsafeDirectByteBuf {
 
+    // 包装复用，可能减少数据的复制
     WrappedUnpooledUnsafeDirectByteBuf(ByteBufAllocator alloc, long memoryAddress, int size, boolean doFree) {
         super(alloc, PlatformDependent.directBuffer(memoryAddress, size), size, doFree);
     }

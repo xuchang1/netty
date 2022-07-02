@@ -56,7 +56,9 @@ public class UnpooledHeapByteBuf extends AbstractReferenceCountedByteBuf {
         }
 
         this.alloc = checkNotNull(alloc, "alloc");
+        // 初始化字节数组并设置
         setArray(allocateArray(initialCapacity));
+        // 设置读写索引为0
         setIndex(0, 0);
     }
 
@@ -124,15 +126,20 @@ public class UnpooledHeapByteBuf extends AbstractReferenceCountedByteBuf {
         }
 
         int bytesToCopy;
+        // 扩容
         if (newCapacity > oldCapacity) {
             bytesToCopy = oldCapacity;
         } else {
+            // 缩容
             trimIndicesToCapacity(newCapacity);
             bytesToCopy = newCapacity;
         }
         byte[] newArray = allocateArray(newCapacity);
+        // 复制数据
         System.arraycopy(oldArray, 0, newArray, 0, bytesToCopy);
+        // 设置字节数组
         setArray(newArray);
+        // 是否内存（啥也没干）
         freeArray(oldArray);
         return this;
     }
@@ -546,6 +553,7 @@ public class UnpooledHeapByteBuf extends AbstractReferenceCountedByteBuf {
     @Override
     protected void deallocate() {
         freeArray(array);
+        // 设置为空数组
         array = EmptyArrays.EMPTY_BYTES;
     }
 

@@ -219,12 +219,14 @@ public abstract class AbstractByteBuf extends ByteBuf {
             return this;
         }
 
+        // 有可读字节，复制并改变读写索引位置
         if (readerIndex != writerIndex) {
             setBytes(0, this, readerIndex, writerIndex - readerIndex);
             writerIndex -= readerIndex;
             adjustMarkers(readerIndex);
             readerIndex = 0;
         } else {
+            // 无可读字节，字节重置索引位置
             ensureAccessible();
             adjustMarkers(readerIndex);
             writerIndex = readerIndex = 0;
@@ -235,6 +237,7 @@ public abstract class AbstractByteBuf extends ByteBuf {
     @Override
     public ByteBuf discardSomeReadBytes() {
         if (readerIndex > 0) {
+            // 没有可读字节，字节重置索引
             if (readerIndex == writerIndex) {
                 ensureAccessible();
                 adjustMarkers(readerIndex);
@@ -242,6 +245,7 @@ public abstract class AbstractByteBuf extends ByteBuf {
                 return this;
             }
 
+            // 已读数据超过容量一般，回收已读空间
             if (readerIndex >= capacity() >>> 1) {
                 setBytes(0, this, readerIndex, writerIndex - readerIndex);
                 writerIndex -= readerIndex;
@@ -268,9 +272,10 @@ public abstract class AbstractByteBuf extends ByteBuf {
         }
     }
 
-    // Called after a capacity reduction
+    // Called after a capacity reduction（缩容）
     protected final void trimIndicesToCapacity(int newCapacity) {
         if (writerIndex() > newCapacity) {
+            // 数据会丢失
             setIndex0(Math.min(readerIndex(), newCapacity), newCapacity);
         }
     }

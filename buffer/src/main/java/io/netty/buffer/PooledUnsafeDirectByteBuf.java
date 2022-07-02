@@ -26,6 +26,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 
+// 基于 Unsafe 版本的实现
 final class PooledUnsafeDirectByteBuf extends PooledByteBuf<ByteBuffer> {
     private static final ObjectPool<PooledUnsafeDirectByteBuf> RECYCLER = ObjectPool.newPool(
             new ObjectCreator<PooledUnsafeDirectByteBuf>() {
@@ -51,6 +52,7 @@ final class PooledUnsafeDirectByteBuf extends PooledByteBuf<ByteBuffer> {
     void init(PoolChunk<ByteBuffer> chunk, ByteBuffer nioBuffer,
               long handle, int offset, int length, int maxLength, PoolThreadCache cache) {
         super.init(chunk, nioBuffer, handle, offset, length, maxLength, cache);
+        // 初始化内存地址
         initMemoryAddress();
     }
 
@@ -61,6 +63,7 @@ final class PooledUnsafeDirectByteBuf extends PooledByteBuf<ByteBuffer> {
     }
 
     private void initMemoryAddress() {
+        // 基于 UNSAFE 类，拿到 memory 对象的地址
         memoryAddress = PlatformDependent.directBufferAddress(memory) + offset;
     }
 
@@ -243,6 +246,7 @@ final class PooledUnsafeDirectByteBuf extends PooledByteBuf<ByteBuffer> {
     }
 
     private long addr(int index) {
+        // 偏移量的内存地址
         return memoryAddress + index;
     }
 

@@ -249,6 +249,7 @@ public final class ByteBufUtil {
      * <p>
      * {@code a[aStartIndex : aStartIndex + length] == b[bStartIndex : bStartIndex + length]}
      */
+    // 如何判断这种方式的读取比较效率和字节一个个读取比较的效率？
     public static boolean equals(ByteBuf a, int aStartIndex, ByteBuf b, int bStartIndex, int length) {
         checkNotNull(a, "a");
         checkNotNull(b, "b");
@@ -261,7 +262,9 @@ public final class ByteBufUtil {
             return false;
         }
 
+        // 除以8，表示可读多少个long类型数据
         final int longCount = length >>> 3;
+        // 除以8的余数，表示剩余可读的byte数量
         final int byteCount = length & 7;
 
         if (a.order() == b.order()) {
@@ -274,6 +277,7 @@ public final class ByteBufUtil {
             }
         } else {
             for (int i = longCount; i > 0; i --) {
+                // 为啥要 swapLong？
                 if (a.getLong(aStartIndex) != swapLong(b.getLong(bStartIndex))) {
                     return false;
                 }
@@ -1168,8 +1172,10 @@ public final class ByteBufUtil {
         }
 
         if (PlatformDependent.hasUnsafe()) {
+            // 基于 unsafe 类
             return ThreadLocalUnsafeDirectByteBuf.newInstance();
         } else {
+            // 基于 direct
             return ThreadLocalDirectByteBuf.newInstance();
         }
     }
@@ -1498,7 +1504,9 @@ public final class ByteBufUtil {
                 });
 
         static ThreadLocalUnsafeDirectByteBuf newInstance() {
+            // 从 RECYCLER 中，获得 ThreadLocalUnsafeDirectByteBuf 对象
             ThreadLocalUnsafeDirectByteBuf buf = RECYCLER.get();
+            // 初始化 ref 为 1
             buf.resetRefCnt();
             return buf;
         }
@@ -1512,9 +1520,11 @@ public final class ByteBufUtil {
 
         @Override
         protected void deallocate() {
+            // capacity 超过阈值，直接释放
             if (capacity() > THREAD_LOCAL_BUFFER_SIZE) {
                 super.deallocate();
             } else {
+                // 未超过阈值，清空回收
                 clear();
                 handle.recycle(this);
             }
