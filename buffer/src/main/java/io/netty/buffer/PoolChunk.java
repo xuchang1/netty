@@ -140,9 +140,20 @@ final class PoolChunk<T> implements PoolChunkMetric {
     static final int SIZE_SHIFT = INUSED_BIT_LENGTH + IS_USED_SHIFT;
     static final int RUN_OFFSET_SHIFT = SIZE_BIT_LENGTH + SIZE_SHIFT;
 
+    /**
+     * 所属 Arena 对象
+     */
     final PoolArena<T> arena;
     final Object base;
+
+    /**
+     * 内存空间
+     */
     final T memory;
+
+    /**
+     * 是否非池化
+     */
     final boolean unpooled;
 
     /**
@@ -156,12 +167,26 @@ final class PoolChunk<T> implements PoolChunkMetric {
     private final LongPriorityQueue[] runsAvail;
 
     /**
+     * PoolSubpage 数组
      * manage all subpages in this chunk
      */
     private final PoolSubpage<T>[] subpages;
 
+    /**
+     * Page 大小，默认 8KB = 8192B
+     */
     private final int pageSize;
+
+    /**
+     * 从 1 开始左移到 {@link #pageSize} 的位数。默认 13 ，1 << 13 = 8192 。
+     *
+     * 具体用途，见 {@link #allocateRun(int)} 方法，计算指定容量所在满二叉树的层级。
+     */
     private final int pageShifts;
+
+    /**
+     * Chunk 内存块占用大小。默认为 16M = 16 * 1024  。
+     */
     private final int chunkSize;
 
     // Use as cache for ByteBuffer created from the memory. These are just duplicates and so are only a container
@@ -171,10 +196,24 @@ final class PoolChunk<T> implements PoolChunkMetric {
     // This may be null if the PoolChunk is unpooled as pooling the ByteBuffer instances does not make any sense here.
     private final Deque<ByteBuffer> cachedNioBuffers;
 
+    /**
+     * 剩余可用字节数
+     */
     int freeBytes;
 
+    /**
+     * 所属 PoolChunkList 对象
+     */
     PoolChunkList<T> parent;
+
+    /**
+     * 上一个 Chunk 对象
+     */
     PoolChunk<T> prev;
+
+    /**
+     * 下一个 Chunk 对象
+     */
     PoolChunk<T> next;
 
     // TODO: Test if adding padding helps under contention
