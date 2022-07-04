@@ -2207,6 +2207,7 @@ public abstract class ByteBuf implements ReferenceCounted, Comparable<ByteBuf>, 
      * This method behaves similarly to {@code slice().retain()} except that this method may return
      * a buffer implementation that produces less garbage.
      */
+    // 引用计数+1，需要释放
     public abstract ByteBuf retainedSlice();
 
     /**

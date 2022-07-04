@@ -29,6 +29,7 @@ class SimpleLeakAwareByteBuf extends WrappedByteBuf {
      * is called this object will be used as the argument. It is also assumed that this object is used when
      * {@link ResourceLeakDetector#track(Object)} is called to create {@link #leak}.
      */
+    // 关联的 ByteBuf 对象
     private final ByteBuf trackedByteBuf;
     final ResourceLeakTracker<ByteBuf> leak;
 
@@ -99,7 +100,9 @@ class SimpleLeakAwareByteBuf extends WrappedByteBuf {
 
     @Override
     public boolean release() {
+        // 释放完成
         if (super.release()) {
+            // 关闭 ResourceLeakTracker
             closeLeak();
             return true;
         }
@@ -134,8 +137,10 @@ class SimpleLeakAwareByteBuf extends WrappedByteBuf {
     private ByteBuf unwrappedDerived(ByteBuf derived) {
         // We only need to unwrap SwappedByteBuf implementations as these will be the only ones that may end up in
         // the AbstractLeakAwareByteBuf implementations beside slices / duplicates and "real" buffers.
+        // 返回 un wrap 的 ByteBuf
         ByteBuf unwrappedDerived = unwrapSwapped(derived);
 
+        // 如果是池化的
         if (unwrappedDerived instanceof AbstractPooledDerivedByteBuf) {
             // Update the parent to point to this buffer so we correctly close the ResourceLeakTracker.
             ((AbstractPooledDerivedByteBuf) unwrappedDerived).parent(this);
@@ -164,6 +169,7 @@ class SimpleLeakAwareByteBuf extends WrappedByteBuf {
 
     private SimpleLeakAwareByteBuf newSharedLeakAwareByteBuf(
             ByteBuf wrapped) {
+        // trackedByteBuf 和 leak 是关联起来的，而 wrapped 不是，是传参传进来的。
         return newLeakAwareByteBuf(wrapped, trackedByteBuf, leak);
     }
 

@@ -69,6 +69,7 @@ public abstract class ReferenceCountUpdater<T extends ReferenceCounted> {
     }
 
     private static int realRefCnt(int rawCnt) {
+        // 奇数返回0，偶数除以2返回（refCnt存储的值是正常引用次数的两倍，为啥要这样设计？）
         return rawCnt != 2 && rawCnt != 4 && (rawCnt & 1) != 0 ? 0 : rawCnt >>> 1;
     }
 
@@ -128,6 +129,7 @@ public abstract class ReferenceCountUpdater<T extends ReferenceCounted> {
     // rawIncrement == increment << 1
     private T retain0(T instance, final int increment, final int rawIncrement) {
         int oldRef = updater().getAndAdd(instance, rawIncrement);
+        // 非偶数
         if (oldRef != 2 && oldRef != 4 && (oldRef & 1) != 0) {
             throw new IllegalReferenceCountException(0, increment);
         }
@@ -135,13 +137,20 @@ public abstract class ReferenceCountUpdater<T extends ReferenceCounted> {
         if ((oldRef <= 0 && oldRef + rawIncrement >= 0)
                 || (oldRef >= 0 && oldRef + rawIncrement < oldRef)) {
             // overflow case
+            // 还原
             updater().getAndAdd(instance, -rawIncrement);
             throw new IllegalReferenceCountException(realRefCnt(oldRef), increment);
         }
         return instance;
     }
 
+    /**
+     * 释放一次引用计数
+     *
+     * @return true，如果完全释放（refCnt == 1 表示完全释放）
+     */
     public final boolean release(T instance) {
+        // 获取值
         int rawCnt = nonVolatileRawCnt(instance);
         return rawCnt == 2 ? tryFinalRelease0(instance, 2) || retryRelease0(instance, 1)
                 : nonFinalRelease0(instance, 1, rawCnt, toLiveRealRefCnt(rawCnt, 1));
@@ -154,11 +163,15 @@ public abstract class ReferenceCountUpdater<T extends ReferenceCounted> {
                 : nonFinalRelease0(instance, decrement, rawCnt, realCnt);
     }
 
+    /**
+     * 值更新为1
+     */
     private boolean tryFinalRelease0(T instance, int expectRawCnt) {
         return updater().compareAndSet(instance, expectRawCnt, 1); // any odd number will work
     }
 
     private boolean nonFinalRelease0(T instance, int decrement, int rawCnt, int realCnt) {
+        // 尝试更新一次，失败就 cas + retry
         if (decrement < realCnt
                 // all changes to the raw count are 2x the "real" change - overflow is OK
                 && updater().compareAndSet(instance, rawCnt, rawCnt - (decrement << 1))) {
@@ -167,15 +180,20 @@ public abstract class ReferenceCountUpdater<T extends ReferenceCounted> {
         return retryRelease0(instance, decrement);
     }
 
+    /**
+     * cas 的方式，减少引用次数
+     */
     private boolean retryRelease0(T instance, int decrement) {
         for (;;) {
             int rawCnt = updater().get(instance), realCnt = toLiveRealRefCnt(rawCnt, decrement);
             if (decrement == realCnt) {
+                // 释放
                 if (tryFinalRelease0(instance, rawCnt)) {
                     return true;
                 }
             } else if (decrement < realCnt) {
                 // all changes to the raw count are 2x the "real" change
+                // 减 2倍 decrement
                 if (updater().compareAndSet(instance, rawCnt, rawCnt - (decrement << 1))) {
                     return false;
                 }

@@ -50,6 +50,7 @@ public interface ReferenceCounted {
      * If this object is determined to be leaked, the information recorded by this operation will be provided to you
      * via {@link ResourceLeakDetector}.  This method is a shortcut to {@link #touch(Object) touch(null)}.
      */
+    // 等价于调用 `#touch(null)` 方法
     ReferenceCounted touch();
 
     /**

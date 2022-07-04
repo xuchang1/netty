@@ -61,6 +61,7 @@ final class AdvancedLeakAwareByteBuf extends SimpleLeakAwareByteBuf {
     }
 
     static void recordLeakNonRefCountingOperation(ResourceLeakTracker<ByteBuf> leak) {
+        // 默认情况下会记录调用信息
         if (!ACQUIRE_AND_RELEASE_ONLY) {
             leak.record();
         }

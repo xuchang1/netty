@@ -29,6 +29,9 @@ public abstract class AbstractReferenceCountedByteBuf extends AbstractByteBuf {
     private static final AtomicIntegerFieldUpdater<AbstractReferenceCountedByteBuf> AIF_UPDATER =
             AtomicIntegerFieldUpdater.newUpdater(AbstractReferenceCountedByteBuf.class, "refCnt");
 
+    /**
+     * refCnt 的更新器
+     */
     private static final ReferenceCountUpdater<AbstractReferenceCountedByteBuf> updater =
             new ReferenceCountUpdater<AbstractReferenceCountedByteBuf>() {
         @Override
@@ -42,6 +45,9 @@ public abstract class AbstractReferenceCountedByteBuf extends AbstractByteBuf {
     };
 
     // Value might not equal "real" reference count, all access should be via the updater
+    /**
+     * 引用计数（为啥初始值是2？为啥存储的值是正常引用次数的两倍？）
+     */
     @SuppressWarnings({"unused", "FieldMayBeFinal"})
     private volatile int refCnt;
 
@@ -108,6 +114,7 @@ public abstract class AbstractReferenceCountedByteBuf extends AbstractByteBuf {
 
     private boolean handleRelease(boolean result) {
         if (result) {
+            // 完全释放，进行回收操作
             deallocate();
         }
         return result;
