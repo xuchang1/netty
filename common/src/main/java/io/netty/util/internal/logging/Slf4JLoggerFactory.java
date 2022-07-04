@@ -54,4 +54,12 @@ public class Slf4JLoggerFactory extends InternalLoggerFactory {
         return logger instanceof LocationAwareLogger ?
                 new LocationAwareSlf4JLogger((LocationAwareLogger) logger) : new Slf4JLogger(logger);
     }
+
+    static InternalLoggerFactory getInstanceWithNopCheck() {
+        return NopInstanceHolder.INSTANCE_WITH_NOP_CHECK;
+    }
+
+    private static final class NopInstanceHolder {
+        private static final InternalLoggerFactory INSTANCE_WITH_NOP_CHECK = new Slf4JLoggerFactory(true);
+    }
 }

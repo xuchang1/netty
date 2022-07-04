@@ -78,7 +78,10 @@ abstract class PooledByteBuf<T> extends AbstractReferenceCountedByteBuf {
                        long handle, int offset, int length, int maxLength, PoolThreadCache cache) {
         assert handle >= 0;
         assert chunk != null;
+        assert !PoolChunk.isSubpage(handle) || chunk.arena.size2SizeIdx(maxLength) <= chunk.arena.smallMaxSizeIdx:
+                "Allocated small sub-page handle for a buffer size that isn't \"small.\"";
 
+        chunk.incrementPinnedMemory(maxLength);
         this.chunk = chunk;
         memory = chunk.memory;
         tmpNioBuf = nioBuffer;
@@ -145,6 +148,7 @@ abstract class PooledByteBuf<T> extends AbstractReferenceCountedByteBuf {
 
         // Reallocation required.
         // 重新分配新的内存空间，并将数据复制到其中。并且，释放老的内存空间。
+        chunk.decrementPinnedMemory(maxLength);
         chunk.arena.reallocate(this, newCapacity, true);
         return this;
     }
@@ -200,6 +204,7 @@ abstract class PooledByteBuf<T> extends AbstractReferenceCountedByteBuf {
             this.handle = -1;
             memory = null;
             // 释放内存回 Arena 中
+            chunk.decrementPinnedMemory(maxLength);
             chunk.arena.free(chunk, tmpNioBuf, handle, maxLength, cache);
             tmpNioBuf = null;
             chunk = null;

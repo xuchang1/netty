@@ -16,9 +16,9 @@
 package io.netty.handler.codec.http;
 
 import io.netty.microbench.util.AbstractMicrobenchmark;
+import io.netty.util.internal.MathUtil;
 import io.netty.util.internal.PlatformDependent;
 import io.netty.util.internal.StringUtil;
-import org.jctools.util.Pow2;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.CompilerControl;
 import org.openjdk.jmh.annotations.CompilerControl.Mode;
@@ -59,7 +59,7 @@ public class DecodeHexBenchmark extends AbstractMicrobenchmark {
     public void init() {
         final char[] hexCh = hex.toCharArray();
         next = 0;
-        inputs = Pow2.roundToPowerOfTwo(inputs);
+        inputs = MathUtil.findNextPositivePowerOfTwo(inputs);
         hexDigits = new char[inputs][];
         hexDigits[0] = hexCh;
         if (inputs > 1) {
@@ -165,14 +165,13 @@ public class DecodeHexBenchmark extends AbstractMicrobenchmark {
     }
 
     private static int decodeHexNibbleWithCheck(final char c) {
-        final int index = c;
-        if (index >= HEX2B.length) {
+        if ((int) c >= HEX2B.length) {
             return -1;
         }
         if (PlatformDependent.hasUnsafe()) {
-            return PlatformDependent.getByte(HEX2B, index);
+            return PlatformDependent.getByte(HEX2B, c);
         }
-        return HEX2B[index];
+        return HEX2B[c];
     }
 
 }

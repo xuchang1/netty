@@ -36,6 +36,7 @@ import java.net.NetworkInterface;
 import java.net.UnknownHostException;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
+import java.util.Arrays;
 
 import static io.netty.util.AsciiString.indexOf;
 
@@ -70,8 +71,8 @@ public final class NetUtil {
     public static final NetworkInterface LOOPBACK_IF;
 
     /**
-     * The SOMAXCONN value of the current machine.  If failed to get the value,  {@code 200}  is used as a
-     * default value for Windows or {@code 128} for others.
+     * The SOMAXCONN value of the current machine.  If failed to get the value,  {@code 200} is used as a
+     * default value for Windows and {@code 128} for others.
      */
     public static final int SOMAXCONN;
 
@@ -86,7 +87,7 @@ public final class NetUtil {
     private static final int IPV6_MAX_CHAR_COUNT = 39;
 
     /**
-     * Number of bytes needed to represent and IPV6 value
+     * Number of bytes needed to represent an IPV6 value
      */
     private static final int IPV6_BYTE_COUNT = 16;
 
@@ -148,65 +149,66 @@ public final class NetUtil {
         // As a SecurityManager may prevent reading the somaxconn file we wrap this in a privileged block.
         //
         // See https://github.com/netty/netty/issues/3680
-        SOMAXCONN = AccessController.doPrivileged(new PrivilegedAction<Integer>() {
-            @Override
-            public Integer run() {
-                // Determine the default somaxconn (server socket backlog) value of the platform.
-                // The known defaults:
-                // - Windows NT Server 4.0+: 200
-                // - Linux and Mac OS X: 128
-                int somaxconn = PlatformDependent.isWindows() ? 200 : 128;
-                File file = new File("/proc/sys/net/core/somaxconn");
-                BufferedReader in = null;
-                try {
-                    // file.exists() may throw a SecurityException if a SecurityManager is used, so execute it in the
-                    // try / catch block.
-                    // See https://github.com/netty/netty/issues/4936
-                    if (file.exists()) {
-                        in = new BufferedReader(new FileReader(file));
-                        somaxconn = Integer.parseInt(in.readLine());
-                        if (logger.isDebugEnabled()) {
-                            logger.debug("{}: {}", file, somaxconn);
-                        }
-                    } else {
-                        // Try to get from sysctl
-                        Integer tmp = null;
-                        if (SystemPropertyUtil.getBoolean("io.netty.net.somaxconn.trySysctl", false)) {
-                            tmp = sysctlGetInt("kern.ipc.somaxconn");
-                            if (tmp == null) {
-                                tmp = sysctlGetInt("kern.ipc.soacceptqueue");
-                                if (tmp != null) {
-                                    somaxconn = tmp;
-                                }
-                            } else {
-                                somaxconn = tmp;
-                            }
-                        }
-
-                        if (tmp == null) {
-                            logger.debug("Failed to get SOMAXCONN from sysctl and file {}. Default: {}", file,
-                                         somaxconn);
-                        }
-                    }
-                } catch (Exception e) {
-                    if (logger.isDebugEnabled()) {
-                        logger.debug("Failed to get SOMAXCONN from sysctl and file {}. Default: {}",
-                                file, somaxconn, e);
-                    }
-                } finally {
-                    if (in != null) {
-                        try {
-                            in.close();
-                        } catch (Exception e) {
-                            // Ignored.
-                        }
-                    }
-                }
-                return somaxconn;
-            }
-        });
+        SOMAXCONN = AccessController.doPrivileged(new SoMaxConnAction());
     }
 
+    private static final class SoMaxConnAction implements PrivilegedAction<Integer> {
+        @Override
+        public Integer run() {
+            // Determine the default somaxconn (server socket backlog) value of the platform.
+            // The known defaults:
+            // - Windows NT Server 4.0+: 200
+            // - Linux and Mac OS X: 128
+            int somaxconn = PlatformDependent.isWindows() ? 200 : 128;
+            File file = new File("/proc/sys/net/core/somaxconn");
+            BufferedReader in = null;
+            try {
+                // file.exists() may throw a SecurityException if a SecurityManager is used, so execute it in the
+                // try / catch block.
+                // See https://github.com/netty/netty/issues/4936
+                if (file.exists()) {
+                    in = new BufferedReader(new FileReader(file));
+                    somaxconn = Integer.parseInt(in.readLine());
+                    if (logger.isDebugEnabled()) {
+                        logger.debug("{}: {}", file, somaxconn);
+                    }
+                } else {
+                    // Try to get from sysctl
+                    Integer tmp = null;
+                    if (SystemPropertyUtil.getBoolean("io.netty.net.somaxconn.trySysctl", false)) {
+                        tmp = sysctlGetInt("kern.ipc.somaxconn");
+                        if (tmp == null) {
+                            tmp = sysctlGetInt("kern.ipc.soacceptqueue");
+                            if (tmp != null) {
+                                somaxconn = tmp;
+                            }
+                        } else {
+                            somaxconn = tmp;
+                        }
+                    }
+
+                    if (tmp == null) {
+                        logger.debug("Failed to get SOMAXCONN from sysctl and file {}. Default: {}", file,
+                                somaxconn);
+                    }
+                }
+            } catch (Exception e) {
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Failed to get SOMAXCONN from sysctl and file {}. Default: {}",
+                            file, somaxconn, e);
+                }
+            } finally {
+                if (in != null) {
+                    try {
+                        in.close();
+                    } catch (Exception e) {
+                        // Ignored.
+                    }
+                }
+            }
+            return somaxconn;
+        }
+    }
     /**
      * This will execute <a href ="https://www.freebsd.org/cgi/man.cgi?sysctl(8)">sysctl</a> with the {@code sysctlKey}
      * which is expected to return the numeric value for for {@code sysctlKey}.
@@ -234,9 +236,10 @@ public final class NetUtil {
                 br.close();
             }
         } finally {
-            if (process != null) {
-                process.destroy();
-            }
+            // No need of 'null' check because we're initializing
+            // the Process instance in first line. Any exception
+            // raised will directly lead to throwable.
+            process.destroy();
         }
     }
 
@@ -282,6 +285,59 @@ public final class NetUtil {
             }
 
             return getIPv6ByName(ipAddressString, true);
+        }
+        return null;
+    }
+
+    /**
+     * Creates an {@link InetAddress} based on an ipAddressString or might return null if it can't be parsed.
+     * No error handling is performed here.
+     */
+    public static InetAddress createInetAddressFromIpAddressString(String ipAddressString) {
+        if (isValidIpV4Address(ipAddressString)) {
+            byte[] bytes = validIpV4ToBytes(ipAddressString);
+            try {
+                return InetAddress.getByAddress(bytes);
+            } catch (UnknownHostException e) {
+                // Should never happen!
+                throw new IllegalStateException(e);
+            }
+        }
+
+        if (isValidIpV6Address(ipAddressString)) {
+            if (ipAddressString.charAt(0) == '[') {
+                ipAddressString = ipAddressString.substring(1, ipAddressString.length() - 1);
+            }
+
+            int percentPos = ipAddressString.indexOf('%');
+            if (percentPos >= 0) {
+                try {
+                    int scopeId = Integer.parseInt(ipAddressString.substring(percentPos + 1));
+                    ipAddressString = ipAddressString.substring(0, percentPos);
+                    byte[] bytes = getIPv6ByName(ipAddressString, true);
+                    if (bytes == null) {
+                        return null;
+                    }
+                    try {
+                        return Inet6Address.getByAddress(null, bytes, scopeId);
+                    } catch (UnknownHostException e) {
+                        // Should never happen!
+                        throw new IllegalStateException(e);
+                    }
+                } catch (NumberFormatException e) {
+                    return null;
+                }
+            }
+            byte[] bytes = getIPv6ByName(ipAddressString, true);
+            if (bytes == null) {
+                return null;
+            }
+            try {
+                return InetAddress.getByAddress(bytes);
+            } catch (UnknownHostException e) {
+                // Should never happen!
+                throw new IllegalStateException(e);
+            }
         }
         return null;
     }
@@ -652,7 +708,8 @@ public final class NetUtil {
      * </ul>
      * @return byte array representation of the {@code ip} or {@code null} if not a valid IP address.
      */
-    private static byte[] getIPv6ByName(CharSequence ip, boolean ipv4Mapped) {
+     // visible for test
+    static byte[] getIPv6ByName(CharSequence ip, boolean ipv4Mapped) {
         final byte[] bytes = new byte[IPV6_BYTE_COUNT];
         final int ipLength = ip.length();
         int compressBegin = 0;
@@ -664,7 +721,6 @@ public final class NetUtil {
         int ipv6Separators = 0;
         int ipv4Separators = 0;
         int tmp;
-        boolean needsShift = false;
         for (; i < ipLength; ++i) {
             final char c = ip.charAt(i);
             switch (c) {
@@ -693,7 +749,6 @@ public final class NetUtil {
                         return null;
                     }
                     ++ipv6Separators;
-                    needsShift = ipv6Separators == 2 && value == 0;
                     compressBegin = currentIndex;
                     compressLength = bytes.length - compressBegin - 2;
                     ++i;
@@ -728,7 +783,7 @@ public final class NetUtil {
                 // The following bit shifting is to restructure the bytes to be left (most significant) to
                 // right (least significant) while also accounting for each IPv4 digit is base 10.
                 begin = (value & 0xf) * 100 + ((value >> 4) & 0xf) * 10 + ((value >> 8) & 0xf);
-                if (begin < 0 || begin > 255) {
+                if (begin > 255) {
                     return null;
                 }
                 bytes[currentIndex++] = (byte) begin;
@@ -761,14 +816,10 @@ public final class NetUtil {
                     currentIndex >= bytes.length) {
                 return null;
             }
-            if (ipv6Separators == 0) {
-                compressLength = 12;
-            } else if (ipv6Separators >= IPV6_MIN_SEPARATORS &&
+            if (!(ipv6Separators == 0 || ipv6Separators >= IPV6_MIN_SEPARATORS &&
                            (!isCompressed && (ipv6Separators == 6 && ip.charAt(0) != ':') ||
                             isCompressed && (ipv6Separators < IPV6_MAX_SEPARATORS &&
-                                             (ip.charAt(0) != ':' || compressBegin <= 2)))) {
-                compressLength -= 2;
-            } else {
+                                             (ip.charAt(0) != ':' || compressBegin <= 2))))) {
                 return null;
             }
             value <<= (IPV4_MAX_CHAR_BETWEEN_SEPARATOR - (i - begin)) << 2;
@@ -777,7 +828,7 @@ public final class NetUtil {
             // The following bit shifting is to restructure the bytes to be left (most significant) to
             // right (least significant) while also accounting for each IPv4 digit is base 10.
             begin = (value & 0xf) * 100 + ((value >> 4) & 0xf) * 10 + ((value >> 8) & 0xf);
-            if (begin < 0 || begin > 255) {
+            if (begin > 255) {
                 return null;
             }
             bytes[currentIndex++] = (byte) begin;
@@ -806,31 +857,12 @@ public final class NetUtil {
             bytes[currentIndex++] = (byte) ((((value >> 8) & 0xf) << 4) | ((value >> 12) & 0xf));
         }
 
-        i = currentIndex + compressLength;
-        if (needsShift || i >= bytes.length) {
-            // Right shift array
-            if (i >= bytes.length) {
-                ++compressBegin;
-            }
-            for (i = currentIndex; i < bytes.length; ++i) {
-                for (begin = bytes.length - 1; begin >= compressBegin; --begin) {
-                    bytes[begin] = bytes[begin - 1];
-                }
-                bytes[begin] = 0;
-                ++compressBegin;
-            }
-        } else {
-            // Selectively move elements
-            for (i = 0; i < compressLength; ++i) {
-                begin = i + compressBegin;
-                currentIndex = begin + compressLength;
-                if (currentIndex < bytes.length) {
-                    bytes[currentIndex] = bytes[begin];
-                    bytes[begin] = 0;
-                } else {
-                    break;
-                }
-            }
+        if (currentIndex < bytes.length) {
+            int toBeCopiedLength = currentIndex - compressBegin;
+            int targetIndex = bytes.length - toBeCopiedLength;
+            System.arraycopy(bytes, compressBegin, bytes, targetIndex, toBeCopiedLength);
+            // targetIndex is also the `toIndex` to fill 0
+            Arrays.fill(bytes, compressBegin, targetIndex, (byte) 0);
         }
 
         if (ipv4Separators > 0) {

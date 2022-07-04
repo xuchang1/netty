@@ -49,4 +49,23 @@ public final class OpenSslContextOption<T> extends SslContextOption<T> {
      */
     public static final OpenSslContextOption<OpenSslPrivateKeyMethod> PRIVATE_KEY_METHOD =
             new OpenSslContextOption<OpenSslPrivateKeyMethod>("PRIVATE_KEY_METHOD");
+
+    /**
+     * Set the {@link OpenSslAsyncPrivateKeyMethod} to use. This allows to offload private-key operations
+     * if needed.
+     *
+     * This is currently only supported when {@code BoringSSL} is used.
+     */
+    public static final OpenSslContextOption<OpenSslAsyncPrivateKeyMethod> ASYNC_PRIVATE_KEY_METHOD =
+            new OpenSslContextOption<OpenSslAsyncPrivateKeyMethod>("ASYNC_PRIVATE_KEY_METHOD");
+
+    /**
+     * Set the {@link OpenSslCertificateCompressionConfig} to use. This allows for the configuration of certificate
+     * compression algorithms which should be used, the priority of those algorithms and the directions in which
+     * they should be used.
+     *
+     * This is currently only supported when {@code BoringSSL} is used.
+     */
+    public static final OpenSslContextOption<OpenSslCertificateCompressionConfig> CERTIFICATE_COMPRESSION_ALGORITHMS =
+            new OpenSslContextOption<OpenSslCertificateCompressionConfig>("CERTIFICATE_COMPRESSION_ALGORITHMS");
 }

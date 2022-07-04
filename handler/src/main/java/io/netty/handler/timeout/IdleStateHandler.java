@@ -25,9 +25,9 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOutboundBuffer;
 import io.netty.channel.ChannelPromise;
+import io.netty.util.concurrent.Future;
 import io.netty.util.internal.ObjectUtil;
 
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -120,10 +120,7 @@ public class IdleStateHandler extends ChannelDuplexHandler {
     /**
      * 读空闲的定时检测任务
      */
-    private ScheduledFuture<?> readerIdleTimeout;
-    /**
-     * 最后读时间
-     */
+    private Future<?> readerIdleTimeout;
     private long lastReadTime;
     /**
      * 是否首次读空闲
@@ -133,17 +130,14 @@ public class IdleStateHandler extends ChannelDuplexHandler {
     /**
      * 写空闲的定时检测任务
      */
-    private ScheduledFuture<?> writerIdleTimeout;
-    /**
-     * 最后写时间
-     */
+    private Future<?> writerIdleTimeout;
     private long lastWriteTime;
     /**
      * 是否首次写空闲
      */
     private boolean firstWriterIdleEvent = true;
 
-    private ScheduledFuture<?> allIdleTimeout;
+    private Future<?> allIdleTimeout;
     private boolean firstAllIdleEvent = true;
 
     private byte state; // 0 - none, 1 - initialized, 2 - destroyed
@@ -349,6 +343,8 @@ public class IdleStateHandler extends ChannelDuplexHandler {
         case 1:
         case 2:
             return;
+        default:
+             break;
         }
 
         state = 1;
@@ -383,7 +379,7 @@ public class IdleStateHandler extends ChannelDuplexHandler {
     /**
      * This method is visible for testing!
      */
-    ScheduledFuture<?> schedule(ChannelHandlerContext ctx, Runnable task, long delay, TimeUnit unit) {
+    Future<?> schedule(ChannelHandlerContext ctx, Runnable task, long delay, TimeUnit unit) {
         return ctx.executor().schedule(task, delay, unit);
     }
 
@@ -495,10 +491,7 @@ public class IdleStateHandler extends ChannelDuplexHandler {
                 long flushProgress = buf.currentProgress();
                 if (flushProgress != lastFlushProgress) {
                     lastFlushProgress = flushProgress;
-
-                    if (!first) {
-                        return true;
-                    }
+                    return !first;
                 }
             }
         }

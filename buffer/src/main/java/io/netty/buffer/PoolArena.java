@@ -160,7 +160,8 @@ abstract class PoolArena<T> extends SizeClasses implements PoolArenaMetric {
             final PoolSubpage<T> s = head.next;
             needsNormalAllocation = s == head;
             if (!needsNormalAllocation) {
-                assert s.doNotDestroy && s.elemSize == sizeIdx2size(sizeIdx);
+                assert s.doNotDestroy && s.elemSize == sizeIdx2size(sizeIdx) : "doNotDestroy=" +
+                        s.doNotDestroy + ", elemSize=" + s.elemSize + ", sizeIdx=" + sizeIdx;
                 long handle = s.allocate();
                 assert handle >= 0;
                 s.chunk.initBufWithSubpage(buf, null, handle, reqCapacity, cache);
@@ -455,6 +456,22 @@ abstract class PoolArena<T> extends SizeClasses implements PoolArenaMetric {
         return max(0, val);
     }
 
+    /**
+     * Return the number of bytes that are currently pinned to buffer instances, by the arena. The pinned memory is not
+     * accessible for use by any other allocation, until the buffers using have all been released.
+     */
+    public long numPinnedBytes() {
+        long val = activeBytesHuge.value(); // Huge chunks are exact-sized for the buffers they were allocated to.
+        synchronized (this) {
+            for (int i = 0; i < chunkListMetrics.size(); i++) {
+                for (PoolChunkMetric m: chunkListMetrics.get(i)) {
+                    val += ((PoolChunk<?>) m).pinnedBytes();
+                }
+            }
+        }
+        return max(0, val);
+    }
+
     protected abstract PoolChunk<T> newChunk(int pageSize, int maxPageIdx, int pageShifts, int chunkSize);
     protected abstract PoolChunk<T> newUnpooledChunk(int capacity);
     protected abstract PooledByteBuf<T> newByteBuf(int maxCapacity);
@@ -541,9 +558,9 @@ abstract class PoolArena<T> extends SizeClasses implements PoolArenaMetric {
     static final class HeapArena extends PoolArena<byte[]> {
 
         HeapArena(PooledByteBufAllocator parent, int pageSize, int pageShifts,
-                  int chunkSize, int directMemoryCacheAlignment) {
+                  int chunkSize) {
             super(parent, pageSize, pageShifts, chunkSize,
-                  directMemoryCacheAlignment);
+                  0);
         }
 
         private static byte[] newByteArray(int size) {

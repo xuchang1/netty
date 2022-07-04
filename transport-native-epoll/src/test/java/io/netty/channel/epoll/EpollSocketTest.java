@@ -19,20 +19,19 @@ import io.netty.channel.unix.DomainSocketAddress;
 import io.netty.channel.unix.PeerCredentials;
 import io.netty.channel.unix.tests.SocketTest;
 import io.netty.channel.unix.tests.UnixTestUtils;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assume.assumeTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class EpollSocketTest extends SocketTest<LinuxSocket> {
-    @BeforeClass
+    @BeforeAll
     public static void loadJNI() {
-        assumeTrue(Epoll.isAvailable());
+        Epoll.ensureAvailability();
     }
 
     @Test
@@ -48,7 +47,7 @@ public class EpollSocketTest extends SocketTest<LinuxSocket> {
         LinuxSocket s2 = LinuxSocket.newSocketDomain();
 
         try {
-            DomainSocketAddress dsa = UnixTestUtils.newSocketAddress();
+            DomainSocketAddress dsa = UnixTestUtils.newDomainSocketAddress();
             s1.bind(dsa);
             s1.listen(1);
 
@@ -66,5 +65,19 @@ public class EpollSocketTest extends SocketTest<LinuxSocket> {
     @Override
     protected LinuxSocket newSocket() {
         return LinuxSocket.newSocketStream();
+    }
+
+    @Override
+    protected int level() {
+        // Value for SOL_SOCKET
+        // See https://github.com/torvalds/linux/blob/v5.17/include/uapi/asm-generic/socket.h
+        return 1;
+    }
+
+    @Override
+    protected int optname() {
+        // Value for SO_REUSEADDR
+        // See https://github.com/torvalds/linux/blob/v5.17/include/uapi/asm-generic/socket.h
+        return 2;
     }
 }

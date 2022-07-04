@@ -87,6 +87,7 @@ public final class Unpooled {
     /**
      * A buffer whose capacity is {@code 0}.
      */
+    @SuppressWarnings("checkstyle:StaticFinalBuffer")  // EmptyByteBuf is not writeable or readable.
     public static final ByteBuf EMPTY_BUFFER = ALLOC.buffer(0, 0);
 
     static {
@@ -692,10 +693,12 @@ public final class Unpooled {
     @Deprecated
     public static ByteBuf unmodifiableBuffer(ByteBuf buffer) {
         ByteOrder endianness = buffer.order();
+        // 大端
         if (endianness == BIG_ENDIAN) {
             return new ReadOnlyByteBuf(buffer);
         }
 
+        // 小端
         return new ReadOnlyByteBuf(buffer.order(BIG_ENDIAN)).order(LITTLE_ENDIAN);
     }
 

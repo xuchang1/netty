@@ -25,10 +25,11 @@ import io.netty.buffer.UnpooledHeapByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
+import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.channel.socket.ChannelInputShutdownEvent;
 import io.netty.util.internal.PlatformDependent;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
@@ -36,12 +37,13 @@ import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static io.netty.buffer.Unpooled.wrappedBuffer;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertSame;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 public class ByteToMessageDecoderTest {
 
@@ -164,8 +166,8 @@ public class ByteToMessageDecoderTest {
     }
 
     private static void assertCumulationReleased(ByteBuf byteBuf) {
-        assertTrue("unexpected value: " + byteBuf,
-                byteBuf == null || byteBuf == Unpooled.EMPTY_BUFFER || byteBuf.refCnt() == 0);
+        assertTrue(byteBuf == null || byteBuf == Unpooled.EMPTY_BUFFER || byteBuf.refCnt() == 0,
+                "unexpected value: " + byteBuf);
     }
 
     @Test
@@ -434,17 +436,18 @@ public class ByteToMessageDecoderTest {
         }
     }
 
+    private static final class ReadInterceptingHandler extends ChannelOutboundHandlerAdapter {
+        private int readsTriggered;
+
+        @Override
+        public void read(ChannelHandlerContext ctx) throws Exception {
+            readsTriggered++;
+            super.read(ctx);
+        }
+    }
+
     @Test
     public void testDoesNotOverRead() {
-        class ReadInterceptingHandler extends ChannelOutboundHandlerAdapter {
-            private int readsTriggered;
-
-            @Override
-            public void read(ChannelHandlerContext ctx) throws Exception {
-                readsTriggered++;
-                super.read(ctx);
-            }
-        }
         ReadInterceptingHandler interceptor = new ReadInterceptingHandler();
 
         EmbeddedChannel channel = new EmbeddedChannel();
@@ -502,10 +505,10 @@ public class ByteToMessageDecoderTest {
         };
         EmbeddedChannel channel = new EmbeddedChannel(decoder);
         assertTrue(channel.writeInbound(Unpooled.wrappedBuffer(new byte[]{1, 2, 3, 4, 5})));
-        assertEquals((byte) 1,  channel.readInbound());
-        assertEquals((byte) 2,  channel.readInbound());
-        assertEquals((byte) 3,  channel.readInbound());
-        assertEquals((byte) 4,  channel.readInbound());
+        assertEquals((byte) 1, (Byte) channel.readInbound());
+        assertEquals((byte) 2, (Byte) channel.readInbound());
+        assertEquals((byte) 3, (Byte) channel.readInbound());
+        assertEquals((byte) 4, (Byte) channel.readInbound());
         ByteBuf buffer5 = channel.readInbound();
         assertEquals((byte) 5, buffer5.readByte());
         assertFalse(buffer5.isReadable());
@@ -537,5 +540,26 @@ public class ByteToMessageDecoderTest {
         assertTrue(channel.finish());
         assertBuffer(Unpooled.wrappedBuffer(bytes), (ByteBuf) channel.readInbound());
         assertNull(channel.readInbound());
+    }
+
+    @Test
+    void testUnexpectRead() {
+        EmbeddedChannel channel = new EmbeddedChannel();
+        channel.config().setAutoRead(false);
+        ReadInterceptingHandler interceptor = new ReadInterceptingHandler();
+        channel.pipeline().addLast(
+                interceptor,
+                new SimpleChannelInboundHandler<ByteBuf>() {
+                    @Override
+                    protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg) throws Exception {
+                        ctx.pipeline().replace(this, "fix", new FixedLengthFrameDecoder(3));
+                    }
+                }
+        );
+
+        assertFalse(channel.writeInbound(Unpooled.wrappedBuffer(new byte[]{1})));
+        assertEquals(0, interceptor.readsTriggered);
+        assertNotNull(channel.pipeline().get(FixedLengthFrameDecoder.class));
+        assertFalse(channel.finish());
     }
 }
