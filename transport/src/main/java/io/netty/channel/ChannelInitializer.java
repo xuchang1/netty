@@ -137,11 +137,10 @@ public abstract class ChannelInitializer<C extends Channel> extends ChannelInbou
                 // We do so to prevent multiple calls to initChannel(...).
                 exceptionCaught(ctx, cause);
             } finally {
-                ChannelPipeline pipeline = ctx.pipeline();
                 // 从 pipeline 中移除当前 ChannelInitializer 实现的handler，避免重新初始化。
                 // 注意此处的移除操作，与initMap结合，保证了initChannel()方法不会在handlerAdded、channelRegistered两个事件中被重复调用
-                if (pipeline.context(this) != null) {
-                    pipeline.remove(this);
+                if (!ctx.isRemoved()) {
+                    ctx.pipeline().remove(this);
                 }
             }
             return true;

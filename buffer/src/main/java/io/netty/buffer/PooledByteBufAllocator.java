@@ -57,12 +57,7 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
     /**
      * {@link PoolChunk} 满二叉树的高度，默认为 11 。
      */
-    private static final int DEFAULT_MAX_ORDER; // 8192 << 11 = 16 MiB per chunk
-    /**
-     * 默认 {@link PoolThreadCache} 的 small 类型的内存块的缓存数量。默认为 256 。
-     *
-     * @see #smallCacheSize
-     */
+    private static final int DEFAULT_MAX_ORDER; // 8192 << 9 = 4 MiB per chunk
     private static final int DEFAULT_SMALL_CACHE_SIZE;
     /**
      * 默认 {@link PoolThreadCache} 的 normal 类型的内存块的缓存数量。默认为 64 。
@@ -100,6 +95,8 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
      */
     private static final int MAX_CHUNK_SIZE = (int) (((long) Integer.MAX_VALUE + 1) / 2);
 
+    private static final int CACHE_NOT_USED = 0;
+
     private final Runnable trimTask = new Runnable() {
         @Override
         public void run() {
@@ -122,13 +119,13 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
         DEFAULT_PAGE_SIZE = defaultPageSize;
         DEFAULT_DIRECT_MEMORY_CACHE_ALIGNMENT = defaultAlignment;
 
-        int defaultMaxOrder = SystemPropertyUtil.getInt("io.netty.allocator.maxOrder", 11);
+        int defaultMaxOrder = SystemPropertyUtil.getInt("io.netty.allocator.maxOrder", 9);
         Throwable maxOrderFallbackCause = null;
         try {
             validateAndCalculateChunkSize(DEFAULT_PAGE_SIZE, defaultMaxOrder);
         } catch (Throwable t) {
             maxOrderFallbackCause = t;
-            defaultMaxOrder = 11;
+            defaultMaxOrder = 9;
         }
         DEFAULT_MAX_ORDER = defaultMaxOrder;
 
@@ -189,7 +186,7 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
         }
 
         DEFAULT_USE_CACHE_FOR_ALL_THREADS = SystemPropertyUtil.getBoolean(
-                "io.netty.allocator.useCacheForAllThreads", true);
+                "io.netty.allocator.useCacheForAllThreads", false);
 
         // Use 1023 by default as we use an ArrayDeque as backing storage which will then allocate an internal array
         // of 1024 elements. Otherwise we would allocate 2048 and only use 1024 which is wasteful.
@@ -352,8 +349,7 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
             List<PoolArenaMetric> metrics = new ArrayList<PoolArenaMetric>(heapArenas.length);
             for (int i = 0; i < heapArenas.length; i ++) {
                 PoolArena.HeapArena arena = new PoolArena.HeapArena(this,
-                        pageSize, pageShifts, chunkSize,
-                        directMemoryCacheAlignment);
+                        pageSize, pageShifts, chunkSize);
                 heapArenas[i] = arena;
                 metrics.add(arena);
             }
@@ -476,14 +472,14 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
     }
 
     /**
-     * Default maximum order - System Property: io.netty.allocator.maxOrder - default 11
+     * Default maximum order - System Property: io.netty.allocator.maxOrder - default 9
      */
     public static int defaultMaxOrder() {
         return DEFAULT_MAX_ORDER;
     }
 
     /**
-     * Default thread caching behavior - System Property: io.netty.allocator.useCacheForAllThreads - default true
+     * Default thread caching behavior - System Property: io.netty.allocator.useCacheForAllThreads - default false
      */
     public static boolean defaultUseCacheForAllThreads() {
         return DEFAULT_USE_CACHE_FOR_ALL_THREADS;
@@ -533,6 +529,7 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
     }
 
     /**
+     * @deprecated will be removed
      * Returns {@code true} if the calling {@link Thread} has a {@link ThreadLocal} cache for the allocated
      * buffers.
      */
@@ -542,6 +539,7 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
     }
 
     /**
+     * @deprecated will be removed
      * Free all cached buffers for the calling {@link Thread}.
      */
     @Deprecated
@@ -549,7 +547,7 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
         threadCache.remove();
     }
 
-    final class PoolThreadLocalCache extends FastThreadLocal<PoolThreadCache> {
+    private final class PoolThreadLocalCache extends FastThreadLocal<PoolThreadCache> {
         private final boolean useCacheForAllThreads;
 
         PoolThreadLocalCache(boolean useCacheForAllThreads) {
@@ -563,15 +561,20 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
             final PoolArena<ByteBuffer> directArena = leastUsedArena(directArenas);
 
             final Thread current = Thread.currentThread();
+            final EventExecutor executor = ThreadExecutorMap.currentExecutor();
             // 创建开启缓存的 PoolThreadCache 对象
-            if (useCacheForAllThreads || current instanceof FastThreadLocalThread) {
+            if (useCacheForAllThreads ||
+                    // If the current thread is a FastThreadLocalThread we will always use the cache
+                    current instanceof FastThreadLocalThread ||
+                    // The Thread is used by an EventExecutor, let's use the cache as the chances are good that we
+                    // will allocate a lot!
+                    executor != null) {
                 final PoolThreadCache cache = new PoolThreadCache(
                         heapArena, directArena, smallCacheSize, normalCacheSize,
                         DEFAULT_MAX_CACHED_BUFFER_CAPACITY, DEFAULT_CACHE_TRIM_INTERVAL);
 
                 // 调度定期裁剪内存
                 if (DEFAULT_CACHE_TRIM_INTERVAL_MILLIS > 0) {
-                    final EventExecutor executor = ThreadExecutorMap.currentExecutor();
                     if (executor != null) {
                         executor.scheduleAtFixedRate(trimTask, DEFAULT_CACHE_TRIM_INTERVAL_MILLIS,
                                 DEFAULT_CACHE_TRIM_INTERVAL_MILLIS, TimeUnit.MILLISECONDS);
@@ -599,6 +602,11 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
             // 获得第零个 PoolArena 对象
             PoolArena<T> minArena = arenas[0];
             // 比较后面的 PoolArena 对象，选择线程使用最少的
+            //optimized
+            //If it is the first execution, directly return minarena and reduce the number of for loop comparisons below
+            if (minArena.numThreadCaches.get() == CACHE_NOT_USED) {
+                return minArena;
+            }
             for (int i = 1; i < arenas.length; i++) {
                 PoolArena<T> arena = arenas[i];
                 if (arena.numThreadCaches.get() < minArena.numThreadCaches.get()) {
@@ -730,6 +738,40 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
         long used = 0;
         for (PoolArena<?> arena : arenas) {
             used += arena.numActiveBytes();
+            if (used < 0) {
+                return Long.MAX_VALUE;
+            }
+        }
+        return used;
+    }
+
+    /**
+     * Returns the number of bytes of heap memory that is currently pinned to heap buffers allocated by a
+     * {@link ByteBufAllocator}, or {@code -1} if unknown.
+     * A buffer can pin more memory than its {@linkplain ByteBuf#capacity() capacity} might indicate,
+     * due to implementation details of the allocator.
+     */
+    public final long pinnedHeapMemory() {
+        return pinnedMemory(heapArenas);
+    }
+
+    /**
+     * Returns the number of bytes of direct memory that is currently pinned to direct buffers allocated by a
+     * {@link ByteBufAllocator}, or {@code -1} if unknown.
+     * A buffer can pin more memory than its {@linkplain ByteBuf#capacity() capacity} might indicate,
+     * due to implementation details of the allocator.
+     */
+    public final long pinnedDirectMemory() {
+        return pinnedMemory(directArenas);
+    }
+
+    private static long pinnedMemory(PoolArena<?>[] arenas) {
+        if (arenas == null) {
+            return -1;
+        }
+        long used = 0;
+        for (PoolArena<?> arena : arenas) {
+            used += arena.numPinnedBytes();
             if (used < 0) {
                 return Long.MAX_VALUE;
             }

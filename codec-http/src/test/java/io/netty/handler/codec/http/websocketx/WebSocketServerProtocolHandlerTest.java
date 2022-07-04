@@ -23,6 +23,8 @@ import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.embedded.EmbeddedChannel;
 
+import io.netty.handler.codec.http.DefaultHttpContent;
+import io.netty.handler.codec.http.DefaultHttpRequest;
 import io.netty.handler.codec.http.HttpClientCodec;
 import io.netty.handler.codec.http.HttpHeaderValues;
 import io.netty.handler.codec.http.HttpRequestDecoder;
@@ -34,32 +36,46 @@ import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.util.CharsetUtil;
 import io.netty.util.ReferenceCountUtil;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayDeque;
 import java.util.Queue;
 
 import static io.netty.handler.codec.http.HttpResponseStatus.*;
 import static io.netty.handler.codec.http.HttpVersion.*;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class WebSocketServerProtocolHandlerTest {
 
     private final Queue<FullHttpResponse> responses = new ArrayDeque<FullHttpResponse>();
 
-    @Before
+    @BeforeEach
     public void setUp() {
         responses.clear();
     }
 
     @Test
-    public void testHttpUpgradeRequest() {
+    public void testHttpUpgradeRequestFull() {
+        testHttpUpgradeRequest0(true);
+    }
+
+    @Test
+    public void testHttpUpgradeRequestNonFull() {
+        testHttpUpgradeRequest0(false);
+    }
+
+    private void testHttpUpgradeRequest0(boolean full) {
         EmbeddedChannel ch = createChannel(new MockOutboundHandler());
         ChannelHandlerContext handshakerCtx = ch.pipeline().context(WebSocketServerProtocolHandshakeHandler.class);
-        writeUpgradeRequest(ch);
+        writeUpgradeRequest(ch, full);
 
         FullHttpResponse response = responses.remove();
         assertEquals(SWITCHING_PROTOCOLS, response.status());
@@ -447,7 +463,26 @@ public class WebSocketServerProtocolHandlerTest {
     }
 
     private static void writeUpgradeRequest(EmbeddedChannel ch) {
-        ch.writeInbound(WebSocketRequestBuilder.successful());
+        writeUpgradeRequest(ch, true);
+    }
+
+    private static void writeUpgradeRequest(EmbeddedChannel ch, boolean full) {
+        HttpRequest request = WebSocketRequestBuilder.successful();
+        if (full) {
+            ch.writeInbound(request);
+        } else {
+            if (request instanceof FullHttpRequest) {
+                FullHttpRequest fullHttpRequest = (FullHttpRequest) request;
+                HttpRequest req = new DefaultHttpRequest(fullHttpRequest.protocolVersion(), fullHttpRequest.method(),
+                        fullHttpRequest.uri(), fullHttpRequest.headers().copy());
+                ch.writeInbound(req);
+                ch.writeInbound(new DefaultHttpContent(fullHttpRequest.content().copy()));
+                ch.writeInbound(LastHttpContent.EMPTY_LAST_CONTENT);
+                fullHttpRequest.release();
+            } else {
+                ch.writeInbound(request);
+            }
+        }
     }
 
     private static String getResponseMessage(FullHttpResponse response) {

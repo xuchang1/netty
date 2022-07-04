@@ -279,13 +279,13 @@ public class ResourceLeakDetector<T> {
             // 获取一个随机数，为0则记录并封装对象返回
             if ((PlatformDependent.threadLocalRandom().nextInt(samplingInterval)) == 0) {
                 reportLeak();
-                return new DefaultResourceLeak(obj, refQueue, allLeaks);
+                return new DefaultResourceLeak(obj, refQueue, allLeaks, getInitialHint(resourceType));
             }
             return null;
         }
         // PARANOID 级别，每次必定记录
         reportLeak();
-        return new DefaultResourceLeak(obj, refQueue, allLeaks);
+        return new DefaultResourceLeak(obj, refQueue, allLeaks, getInitialHint(resourceType));
     }
 
     private void clearRefQueue() {
@@ -330,7 +330,7 @@ public class ResourceLeakDetector<T> {
                 continue;
             }
 
-            String records = ref.toString();
+            String records = ref.getReportAndClearRecords();
             // 打印 records 日志
             if (reportedLeaks.add(records)) {
                 if (records.isEmpty()) {
@@ -371,6 +371,15 @@ public class ResourceLeakDetector<T> {
      */
     @Deprecated
     protected void reportInstancesLeak(String resourceType) {
+    }
+
+    /**
+     * Create a hint object to be attached to an object tracked by this record. Similar to the additional information
+     * supplied to {@link ResourceLeakTracker#record(Object)}, will be printed alongside the stack trace of the
+     * creation of the resource.
+     */
+    protected Object getInitialHint(String resourceType) {
+        return null;
     }
 
     @SuppressWarnings("deprecation")
@@ -418,7 +427,8 @@ public class ResourceLeakDetector<T> {
         DefaultResourceLeak(
                 Object referent,
                 ReferenceQueue<Object> refQueue,
-                Set<DefaultResourceLeak<?>> allLeaks) {
+                Set<DefaultResourceLeak<?>> allLeaks,
+                Object initialHint) {
             // refQueue 被传入 WeakReference 的构造函数中。当前对象被标记为垃圾时，会自动加入到 refQueue 中。此时可以做一些清理工作。
             super(referent, refQueue);
 
@@ -431,7 +441,8 @@ public class ResourceLeakDetector<T> {
             // 记录当前对象
             allLeaks.add(this);
             // Create a new Record so we always have the creation stacktrace included.
-            headUpdater.set(this, new TraceRecord(TraceRecord.BOTTOM));
+            headUpdater.set(this, initialHint == null ?
+                    new TraceRecord(TraceRecord.BOTTOM) : new TraceRecord(TraceRecord.BOTTOM, initialHint));
             this.allLeaks = allLeaks;
         }
 
@@ -571,7 +582,16 @@ public class ResourceLeakDetector<T> {
 
         @Override
         public String toString() {
+            TraceRecord oldHead = headUpdater.get(this);
+            return generateReport(oldHead);
+        }
+
+        String getReportAndClearRecords() {
             TraceRecord oldHead = headUpdater.getAndSet(this, null);
+            return generateReport(oldHead);
+        }
+
+        private String generateReport(TraceRecord oldHead) {
             // head 为null，返回空信息
             if (oldHead == null) {
                 // Already closed

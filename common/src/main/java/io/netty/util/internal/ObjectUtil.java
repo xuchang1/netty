@@ -42,6 +42,26 @@ public final class ObjectUtil {
     }
 
     /**
+     * Check that the given varargs is not null and does not contain elements
+     * null elements.
+     *
+     * If it is, throws {@link NullPointerException}.
+     * Otherwise, returns the argument.
+     */
+    public static <T> T[] deepCheckNotNull(String text, T... varargs) {
+        if (varargs == null) {
+            throw new NullPointerException(text);
+        }
+
+        for (T element : varargs) {
+            if (element == null) {
+                throw new NullPointerException(text);
+            }
+        }
+        return varargs;
+    }
+
+    /**
      * Checks that the given argument is not null. If it is, throws {@link IllegalArgumentException}.
      * Otherwise, returns the argument.
      */
@@ -227,7 +247,7 @@ public final class ObjectUtil {
      */
     public static <T extends Collection<?>> T checkNonEmpty(T collection, String name) {
         //No String concatenation for check
-        if (checkNotNull(collection, name).size() == 0) {
+        if (checkNotNull(collection, name).isEmpty()) {
             throw new IllegalArgumentException("Param '" + name + "' must not be empty");
         }
         return collection;
@@ -270,7 +290,7 @@ public final class ObjectUtil {
     }
 
     /**
-     * Trims the the given argument and checks whether it is neither null nor empty.
+     * Trims the given argument and checks whether it is neither null nor empty.
      * If it is, throws {@link NullPointerException} or {@link IllegalArgumentException}.
      * Otherwise, returns the trimmed argument.
      *

@@ -59,7 +59,10 @@ abstract class PooledByteBuf<T> extends AbstractReferenceCountedByteBuf {
                        long handle, int offset, int length, int maxLength, PoolThreadCache cache) {
         assert handle >= 0;
         assert chunk != null;
+        assert !PoolChunk.isSubpage(handle) || chunk.arena.size2SizeIdx(maxLength) <= chunk.arena.smallMaxSizeIdx:
+                "Allocated small sub-page handle for a buffer size that isn't \"small.\"";
 
+        chunk.incrementPinnedMemory(maxLength);
         this.chunk = chunk;
         memory = chunk.memory;
         tmpNioBuf = nioBuffer;
@@ -115,6 +118,7 @@ abstract class PooledByteBuf<T> extends AbstractReferenceCountedByteBuf {
         }
 
         // Reallocation required.
+        chunk.decrementPinnedMemory(maxLength);
         chunk.arena.reallocate(this, newCapacity, true);
         return this;
     }
@@ -168,6 +172,7 @@ abstract class PooledByteBuf<T> extends AbstractReferenceCountedByteBuf {
             final long handle = this.handle;
             this.handle = -1;
             memory = null;
+            chunk.decrementPinnedMemory(maxLength);
             chunk.arena.free(chunk, tmpNioBuf, handle, maxLength, cache);
             tmpNioBuf = null;
             chunk = null;

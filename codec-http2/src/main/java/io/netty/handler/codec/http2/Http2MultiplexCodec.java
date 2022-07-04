@@ -102,8 +102,8 @@ public class Http2MultiplexCodec extends Http2FrameCodec {
                         Http2ConnectionDecoder decoder,
                         Http2Settings initialSettings,
                         ChannelHandler inboundStreamHandler,
-                        ChannelHandler upgradeStreamHandler, boolean decoupleCloseAndGoAway) {
-        super(encoder, decoder, initialSettings, decoupleCloseAndGoAway);
+                        ChannelHandler upgradeStreamHandler, boolean decoupleCloseAndGoAway, boolean flushPreface) {
+        super(encoder, decoder, initialSettings, decoupleCloseAndGoAway, flushPreface);
         this.inboundStreamHandler = inboundStreamHandler;
         this.upgradeStreamHandler = upgradeStreamHandler;
     }
@@ -213,6 +213,11 @@ public class Http2MultiplexCodec extends Http2FrameCodec {
     }
 
     private void onHttp2GoAwayFrame(ChannelHandlerContext ctx, final Http2GoAwayFrame goAwayFrame) {
+        if (goAwayFrame.lastStreamId() == Integer.MAX_VALUE) {
+            // None of the streams can have an id greater than Integer.MAX_VALUE
+            return;
+        }
+        // Notify which streams were not processed by the remote peer and are safe to retry on another connection:
         try {
             forEachActiveStream(new Http2FrameStreamVisitor() {
                 @Override

@@ -189,7 +189,7 @@ final class HpackDecoder {
                         }
                     } else {
                         // Literal Header Field without Indexing / never Indexed
-                        indexType = ((b & 0x10) == 0x10) ? IndexType.NEVER : IndexType.NONE;
+                        indexType = (b & 0x10) == 0x10 ? IndexType.NEVER : IndexType.NONE;
                         index = b & 0x0F;
                         switch (index) {
                             case 0:
@@ -380,7 +380,7 @@ final class HpackDecoder {
     }
 
     private static HeaderType validate(int streamId, CharSequence name,
-                                       HeaderType previousHeaderType) throws Http2Exception {
+                                       HeaderType previousHeaderType, Http2Headers headers) throws Http2Exception {
         if (hasPseudoHeaderFormat(name)) {
             if (previousHeaderType == HeaderType.REGULAR_HEADER) {
                 throw streamError(streamId, PROTOCOL_ERROR,
@@ -398,10 +398,42 @@ final class HpackDecoder {
                 throw streamError(streamId, PROTOCOL_ERROR, "Mix of request and response pseudo-headers.");
             }
 
+            if (contains(headers, name)) {
+                throw streamError(streamId, PROTOCOL_ERROR, "Duplicate HTTP/2 pseudo-header '%s' encountered.", name);
+            }
+
             return currentHeaderType;
         }
 
         return HeaderType.REGULAR_HEADER;
+    }
+
+    private static boolean contains(Http2Headers headers, CharSequence name) {
+        if (headers == EmptyHttp2Headers.INSTANCE) {
+            return false;
+        }
+        if (headers instanceof DefaultHttp2Headers || headers instanceof ReadOnlyHttp2Headers) {
+            return headers.contains(name);
+        }
+        // We can't be sure the Http2Headers implementation support contains on pseudo-headers,
+        // so we have to use the direct accessors instead.
+        if (Http2Headers.PseudoHeaderName.METHOD.value().equals(name)) {
+            return headers.method() != null;
+        }
+        if (Http2Headers.PseudoHeaderName.SCHEME.value().equals(name)) {
+            return headers.scheme() != null;
+        }
+        if (Http2Headers.PseudoHeaderName.AUTHORITY.value().equals(name)) {
+            return headers.authority() != null;
+        }
+        if (Http2Headers.PseudoHeaderName.PATH.value().equals(name)) {
+            return headers.path() != null;
+        }
+        if (Http2Headers.PseudoHeaderName.STATUS.value().equals(name)) {
+            return headers.status() != null;
+        }
+        // Note: We don't check PROTOCOL because the API presents no alternative way to access it.
+        return false;
     }
 
     private CharSequence readName(int index) throws Http2Exception {
@@ -560,13 +592,12 @@ final class HpackDecoder {
 
             if (validate) {
                 try {
-                    previousType = HpackDecoder.validate(streamId, name, previousType);
+                    previousType = validate(streamId, name, previousType, headers);
                 } catch (Http2Exception ex) {
                     validationException = ex;
                     return;
                 }
             }
-
             headers.add(name, value);
         }
     }

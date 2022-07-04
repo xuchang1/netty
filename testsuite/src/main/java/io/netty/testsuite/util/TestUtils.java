@@ -17,9 +17,10 @@ package io.netty.testsuite.util;
 
 import io.netty.util.CharsetUtil;
 import io.netty.util.internal.ObjectUtil;
+import io.netty.util.internal.SuppressJava6Requirement;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
-import org.junit.rules.TestName;
+import org.junit.jupiter.api.TestInfo;
 import org.tukaani.xz.LZMA2Options;
 import org.tukaani.xz.XZOutputStream;
 
@@ -38,6 +39,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import javax.management.MBeanServer;
 
 public final class TestUtils {
@@ -103,8 +105,14 @@ public final class TestUtils {
     /**
      * Returns the method name of the current test.
      */
-    public static String testMethodName(TestName testName) {
-        String testMethodName = testName.getMethodName();
+    @SuppressJava6Requirement(reason = "Test only")
+    public static String testMethodName(TestInfo testInfo) {
+        String testMethodName = testInfo.getTestMethod().map(new Function<Method, String>() {
+            @Override
+            public String apply(Method method) {
+                return method.getName();
+            }
+        }).orElse("[unknown method]");
         if (testMethodName.contains("[")) {
             testMethodName = testMethodName.substring(0, testMethodName.indexOf('['));
         }

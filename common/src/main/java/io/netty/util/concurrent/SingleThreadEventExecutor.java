@@ -22,6 +22,7 @@ import io.netty.util.internal.ThreadExecutorMap;
 import io.netty.util.internal.UnstableApi;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
+import org.jetbrains.annotations.Async.Schedule;
 
 import java.lang.Thread.State;
 import java.util.ArrayList;
@@ -285,7 +286,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         if (scheduledTaskQueue == null || scheduledTaskQueue.isEmpty()) {
             return true;
         }
-        long nanoTime = AbstractScheduledEventExecutor.nanoTime();
+        long nanoTime = getCurrentTimeNanos();
         for (;;) {
             Runnable scheduledTask = pollScheduledTask(nanoTime);
             if (scheduledTask == null) {
@@ -306,7 +307,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         if (scheduledTaskQueue == null || scheduledTaskQueue.isEmpty()) {
             return false;
         }
-        long nanoTime = AbstractScheduledEventExecutor.nanoTime();
+        long nanoTime = getCurrentTimeNanos();
         Runnable scheduledTask = pollScheduledTask(nanoTime);
         if (scheduledTask == null) {
             return false;
@@ -335,9 +336,6 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
     /**
      * Return the number of tasks that are pending for processing.
-     *
-     * <strong>Be aware that this operation may be expensive as it depends on the internal implementation of the
-     * SingleThreadEventExecutor. So use it with care!</strong>
      */
     public int pendingTasks() {
         return taskQueue.size();
@@ -387,7 +385,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         } while (!fetchedAll); // keep on processing until we fetched all scheduled tasks.
 
         if (ranAtLeastOne) {
-            lastExecutionTime = ScheduledFutureTask.nanoTime();
+            lastExecutionTime = getCurrentTimeNanos();
         }
         afterRunningAllTasks();
         return ranAtLeastOne;
@@ -412,7 +410,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         } while (ranAtLeastOneTask && ++drainAttempt < maxDrainAttempts);
 
         if (drainAttempt > 0) {
-            lastExecutionTime = ScheduledFutureTask.nanoTime();
+            lastExecutionTime = getCurrentTimeNanos();
         }
         afterRunningAllTasks();
 
@@ -476,7 +474,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         }
 
         // 计算执行任务截止时间
-        final long deadline = timeoutNanos > 0 ? ScheduledFutureTask.nanoTime() + timeoutNanos : 0;
+        final long deadline = timeoutNanos > 0 ? getCurrentTimeNanos() + timeoutNanos : 0;
         long runTasks = 0;
         long lastExecutionTime;
         for (;;) {
@@ -489,7 +487,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
             // XXX: Hard-coded value - will make it configurable if it is really a problem.
             // 每64个任务，执行一次是否超时的检查
             if ((runTasks & 0x3F) == 0) {
-                lastExecutionTime = ScheduledFutureTask.nanoTime();
+                lastExecutionTime = getCurrentTimeNanos();
                 if (lastExecutionTime >= deadline) {
                     break;
                 }
@@ -497,7 +495,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
             task = pollTask();
             if (task == null) {
-                lastExecutionTime = ScheduledFutureTask.nanoTime();
+                lastExecutionTime = getCurrentTimeNanos();
                 break;
             }
         }
@@ -519,6 +517,8 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
      * Returns the amount of time left until the scheduled task with the closest dead line is executed.
      */
     protected long delayNanos(long currentTimeNanos) {
+        currentTimeNanos -= initialNanoTime();
+
         ScheduledFutureTask<?> scheduledTask = peekScheduledTask();
         if (scheduledTask == null) {
             return SCHEDULE_PURGE_INTERVAL;
@@ -528,14 +528,14 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     }
 
     /**
-     * Returns the absolute point in time (relative to {@link #nanoTime()}) at which the the next
+     * Returns the absolute point in time (relative to {@link #getCurrentTimeNanos()}) at which the next
      * closest scheduled task should run.
      */
     @UnstableApi
     protected long deadlineNanos() {
         ScheduledFutureTask<?> scheduledTask = peekScheduledTask();
         if (scheduledTask == null) {
-            return nanoTime() + SCHEDULE_PURGE_INTERVAL;
+            return getCurrentTimeNanos() + SCHEDULE_PURGE_INTERVAL;
         }
         return scheduledTask.deadlineNanos();
     }
@@ -548,7 +548,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
      * checks.
      */
     protected void updateLastExecutionTime() {
-        lastExecutionTime = ScheduledFutureTask.nanoTime();
+        lastExecutionTime = getCurrentTimeNanos();
     }
 
     /**
@@ -616,7 +616,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
             shutdownHooks.clear();
             for (Runnable task: copy) {
                 try {
-                    task.run();
+                    runTask(task);
                 } catch (Throwable t) {
                     logger.warn("Shutdown hook raised an exception.", t);
                 } finally {
@@ -626,7 +626,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         }
 
         if (ran) {
-            lastExecutionTime = ScheduledFutureTask.nanoTime();
+            lastExecutionTime = getCurrentTimeNanos();
         }
 
         return ran;
@@ -780,7 +780,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
         // 优雅关闭开始时间，这也是一个标记
         if (gracefulShutdownStartTime == 0) {
-            gracefulShutdownStartTime = ScheduledFutureTask.nanoTime();
+            gracefulShutdownStartTime = getCurrentTimeNanos();
         }
 
         // 执行完普通任务或者没有普通任务时执行完shutdownHook任务
@@ -803,7 +803,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
             return false;
         }
 
-        final long nanoTime = ScheduledFutureTask.nanoTime();
+        final long nanoTime = getCurrentTimeNanos();
 
         // shutdownGracefully(2, 15, TimeUnit.SECONDS); 每两秒内如果有任务提交，进入下一个周期。直到2s内没有任务提交或超时15s。
         // shutdown()方法调用直接返回，优雅关闭截止时间到也返回
@@ -844,13 +844,20 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
     @Override
     public void execute(Runnable task) {
-        ObjectUtil.checkNotNull(task, "task");
-        // 是否立即执行
-        execute(task, !(task instanceof LazyRunnable) && wakesUpForTask(task));
+        execute0(task);
     }
 
     @Override
     public void lazyExecute(Runnable task) {
+        lazyExecute0(task);
+    }
+
+    private void execute0(@Schedule Runnable task) {
+        ObjectUtil.checkNotNull(task, "task");
+        execute(task, !(task instanceof LazyRunnable) && wakesUpForTask(task));
+    }
+
+    private void lazyExecute0(@Schedule Runnable task) {
         execute(ObjectUtil.checkNotNull(task, "task"), false);
     }
 
