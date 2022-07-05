@@ -364,8 +364,13 @@ final class PoolChunk<T> implements PoolChunkMetric {
         return true;
     }
 
+    /**
+     * 基于需要的 runSize，分配一个合适的 run
+     */
     private long allocateRun(int runSize) {
+        // 需要分配的 page 数量
         int pages = runSize >> pageShifts;
+        // 所在的 page 层级
         int pageIdx = arena.pages2pageIdx(pages);
 
         synchronized (runsAvail) {
@@ -380,10 +385,11 @@ final class PoolChunk<T> implements PoolChunkMetric {
             long handle = queue.poll();
 
             assert handle != LongPriorityQueue.NO_VALUE && !isUsed(handle) : "invalid handle: " + handle;
-
+            // 移除对应的 run
             removeAvailRun(queue, handle);
 
             if (handle != -1) {
+                // 分隔大的 run，满足 pages 要求
                 handle = splitLargeRun(handle, pages);
             }
 
@@ -423,6 +429,7 @@ final class PoolChunk<T> implements PoolChunkMetric {
             return arena.nPSizes - 1;
         }
         for (int i = pageIdx; i < arena.nPSizes; i++) {
+            // 找到不为空的 queue
             LongPriorityQueue queue = runsAvail[i];
             if (queue != null && !queue.isEmpty()) {
                 return i;
@@ -445,6 +452,7 @@ final class PoolChunk<T> implements PoolChunkMetric {
             // keep track of trailing unused pages for later use
             int availOffset = runOffset + needPages;
             long availRun = toRunHandle(availOffset, remPages, 0);
+            // 分隔的小的 run 插入
             insertAvailRun(availOffset, remPages, availRun);
 
             // not avail
@@ -676,10 +684,16 @@ final class PoolChunk<T> implements PoolChunkMetric {
         return (int) (handle >> RUN_OFFSET_SHIFT);
     }
 
+    /**
+     * handle 对应的 page size
+     */
     static int runSize(int pageShifts, long handle) {
         return runPages(handle) << pageShifts;
     }
 
+    /**
+     * handle 对应的 pages
+     */
     static int runPages(long handle) {
         return (int) (handle >> SIZE_SHIFT & 0x7fff);
     }
