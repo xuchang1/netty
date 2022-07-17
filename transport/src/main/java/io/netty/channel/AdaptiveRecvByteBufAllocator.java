@@ -23,6 +23,8 @@ import static java.lang.Math.max;
 import static java.lang.Math.min;
 
 /**
+ *
+ * 客户端使用的
  * The {@link RecvByteBufAllocator} that automatically increases and
  * decreases the predicted buffer size on feed back.
  * <p>
@@ -46,11 +48,13 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
 
     static {
         List<Integer> sizeTable = new ArrayList<Integer>();
+        // 从16开始，每次+16.对应 tiny 类型。
         for (int i = 16; i < 512; i += 16) {
             sizeTable.add(i);
         }
 
         // Suppress a warning since i becomes negative when an integer overflow happens
+        // 大于512，成倍增长
         for (int i = 512; i > 0; i <<= 1) { // lgtm[java/constant-comparison]
             sizeTable.add(i);
         }

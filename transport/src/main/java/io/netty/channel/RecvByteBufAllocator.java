@@ -23,11 +23,14 @@ import io.netty.util.internal.UnstableApi;
 import static io.netty.util.internal.ObjectUtil.checkNotNull;
 
 /**
+ * 分配一个大小刚好的buffer，足够接受所有的入站数据也不会浪费空间
  * Allocates a new receive buffer whose capacity is probably large enough to read all inbound data and small enough
  * not to waste its space.
  */
 public interface RecvByteBufAllocator {
     /**
+     * 通过handle来进行实际的操作，预测实际需要的最优buffer容量。
+     *
      * Creates a new handle.  The handle provides the actual operations and keeps the internal information which is
      * required for predicting an optimal buffer capacity.
      */
