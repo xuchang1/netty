@@ -49,6 +49,7 @@ final class LongLongHashMap {
                 long existing = array[index];
                 if (existing == key || existing == 0) {
                     long prev = existing == 0? emptyVal : array[index + 1];
+                    // 相邻存储key、value
                     array[index] = key;
                     array[index + 1] = value;
                     for (; i < maxProbe; i++) { // Nerf any existing misplaced entries.
@@ -61,8 +62,11 @@ final class LongLongHashMap {
                     }
                     return prev;
                 }
+                // hash冲突时，采取一定规则的拉链方式，寻找后一位 index
                 index = index + 2 & mask;
             }
+
+            // 扩容
             expand(); // Grow array and re-hash.
         }
     }

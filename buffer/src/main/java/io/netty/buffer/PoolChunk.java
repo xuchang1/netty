@@ -160,6 +160,7 @@ final class PoolChunk<T> implements PoolChunkMetric {
     final boolean unpooled;
 
     /**
+     * 第一页和最后一页可用的 run。runOffset -> handle 的映射关系
      * store the first page and last page of each avail run
      */
     private final LongLongHashMap runsAvailMap;
@@ -186,6 +187,7 @@ final class PoolChunk<T> implements PoolChunkMetric {
     private final int pageSize;
 
     /**
+     * 基于 pageSize 计算出来的，pageSize 右侧0的个数。
      * 从 1 开始左移到 {@link #pageSize} 的位数。默认 13 ，1 << 13 = 8192 。
      *
      * 具体用途，见 {@link #allocateRun(int)} 方法，计算指定容量所在满二叉树的层级。
@@ -238,13 +240,17 @@ final class PoolChunk<T> implements PoolChunkMetric {
         this.chunkSize = chunkSize;
         freeBytes = chunkSize;
 
+        // 优先队列的数组
         runsAvail = newRunsAvailqueueArray(maxPageIdx);
+        // 自实现的map
         runsAvailMap = new LongLongHashMap(-1);
+        // 能分成多少页，构建对应数组
         subpages = new PoolSubpage[chunkSize >> pageShifts];
 
         //insert initial run, offset = 0, pages = chunkSize / pageSize
         int pages = chunkSize >> pageShifts;
         long initHandle = (long) pages << SIZE_SHIFT;
+        // 插入可用的 run，分别插入第一页和最后一页
         insertAvailRun(0, pages, initHandle);
 
         cachedNioBuffers = new ArrayDeque<ByteBuffer>(8);
@@ -279,8 +285,10 @@ final class PoolChunk<T> implements PoolChunkMetric {
         queue.offer(handle);
 
         //insert first page of run
+        // 第一页的 run 存储
         insertAvailRun0(runOffset, handle);
         if (pages > 1) {
+            // 最后一页的 run 存储
             //insert last page of run
             insertAvailRun0(lastPage(runOffset, pages), handle);
         }
@@ -298,13 +306,16 @@ final class PoolChunk<T> implements PoolChunkMetric {
     }
 
     private void removeAvailRun(LongPriorityQueue queue, long handle) {
+        // 优先队列里面移除 handle 值
         queue.remove(handle);
-
+        // 基于 handle 值，计算 runOffset、pages
         int runOffset = runOffset(handle);
         int pages = runPages(handle);
         //remove first page of run
+        // 移除第一页数据
         runsAvailMap.remove(runOffset);
         if (pages > 1) {
+            // 移除最后一页数据
             //remove last page of run
             runsAvailMap.remove(lastPage(runOffset, pages));
         }
@@ -327,6 +338,12 @@ final class PoolChunk<T> implements PoolChunkMetric {
         return usage(freeBytes);
     }
 
+    /**
+     * 已用的百分比
+     *
+     * @param freeBytes 空闲的字节数
+     * @return 已用的百分比
+     */
     private int usage(int freeBytes) {
         if (freeBytes == 0) {
             return 100;

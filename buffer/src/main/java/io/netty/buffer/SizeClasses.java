@@ -356,11 +356,12 @@ abstract class SizeClasses implements SizeClassesMetric {
     }
 
     private int pages2pageIdxCompute(int pages, boolean floor) {
+        // 1 << pageShifts 是一个page的size，此处的 pageSize 表示的是所有page的size总和，不超过chunkSize大小（正常情况下应该相等）
         int pageSize = pages << pageShifts;
         if (pageSize > chunkSize) {
             return nPSizes;
         }
-
+        // 22
         int x = log2((pageSize << 1) - 1);
 
         int shift = x < LOG2_SIZE_CLASS_GROUP + pageShifts

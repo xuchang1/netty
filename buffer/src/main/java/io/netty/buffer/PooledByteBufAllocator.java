@@ -396,6 +396,7 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
         }
 
         // Logarithm base 2. At this point we know that pageSize is a power of two.
+        // 右侧0的个数（对于2次幂来说）。numberOfLeadingZeros ：返回左侧0的个数。
         return Integer.SIZE - 1 - Integer.numberOfLeadingZeros(pageSize);
     }
 

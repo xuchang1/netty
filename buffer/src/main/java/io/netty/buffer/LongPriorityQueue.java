@@ -18,6 +18,8 @@ package io.netty.buffer;
 import java.util.Arrays;
 
 /**
+ * 顶点最小值
+ *
  * Internal primitive priority queue, used by {@link PoolChunk}.
  * The implementation is based on the binary heap, as described in Algorithms by Sedgewick and Wayne.
  */
