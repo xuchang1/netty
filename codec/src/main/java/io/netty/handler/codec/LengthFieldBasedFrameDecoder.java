@@ -337,6 +337,7 @@ public class LengthFieldBasedFrameDecoder extends ByteToMessageDecoder {
     }
 
     private void discardingTooLongFrame(ByteBuf in) {
+        // skip 指定的length
         long bytesToDiscard = this.bytesToDiscard;
         int localBytesToDiscard = (int) Math.min(bytesToDiscard, in.readableBytes());
         in.skipBytes(localBytesToDiscard);
@@ -397,11 +398,11 @@ public class LengthFieldBasedFrameDecoder extends ByteToMessageDecoder {
     protected Object decode(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
         long frameLength = 0;
         if (frameLengthInt == -1) { // new frame
-
+            // 是否废弃太长的frame
             if (discardingTooLongFrame) {
                 discardingTooLongFrame(in);
             }
-
+            // 可读字节小于当前frame的endOffset
             if (in.readableBytes() < lengthFieldEndOffset) {
                 return null;
             }
@@ -479,6 +480,7 @@ public class LengthFieldBasedFrameDecoder extends ByteToMessageDecoder {
 
     private void failIfNecessary(boolean firstDetectionOfTooLongFrame) {
         if (bytesToDiscard == 0) {
+            // 为0表示已经废弃完了，reset一些值
             // Reset to the initial state and tell the handlers that
             // the frame was too large.
             long tooLongFrameLength = this.tooLongFrameLength;

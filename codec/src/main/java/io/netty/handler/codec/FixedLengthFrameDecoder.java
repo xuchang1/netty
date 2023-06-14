@@ -71,8 +71,10 @@ public class FixedLengthFrameDecoder extends ByteToMessageDecoder {
     protected Object decode(
             @SuppressWarnings("UnusedParameters") ChannelHandlerContext ctx, ByteBuf in) throws Exception {
         if (in.readableBytes() < frameLength) {
+            // 可读字节不够 frameLength 长度，无法解码出消息。
             return null;
         } else {
+            // 可读字节足够 frameLength 长度，解码出一条消息
             return in.readRetainedSlice(frameLength);
         }
     }

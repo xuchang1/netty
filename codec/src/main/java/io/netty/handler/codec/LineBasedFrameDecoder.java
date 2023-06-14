@@ -39,6 +39,10 @@ public class LineBasedFrameDecoder extends ByteToMessageDecoder {
     private final int maxLength;
     /** Whether or not to throw an exception as soon as we exceed maxLength. */
     private final boolean failFast;
+
+    /**
+     * 是否将分隔符包含在return中
+     */
     private final boolean stripDelimiter;
 
     /** True if we're discarding input because we're already over maxLength.  */
@@ -96,15 +100,19 @@ public class LineBasedFrameDecoder extends ByteToMessageDecoder {
      *                          be created.
      */
     protected Object decode(ChannelHandlerContext ctx, ByteBuf buffer) throws Exception {
+        // 循环buffer中换行字节的index
         final int eol = findEndOfLine(buffer);
+        // 主要有max限制的处理.
         if (!discarding) {
             if (eol >= 0) {
                 final ByteBuf frame;
                 final int length = eol - buffer.readerIndex();
                 final int delimLength = buffer.getByte(eol) == '\r'? 2 : 1;
-
+                // 超出了max限制
                 if (length > maxLength) {
+                    // 标记readIndex, 跳过了这部分字节不读
                     buffer.readerIndex(eol + delimLength);
+                    // 触发fail逻辑
                     fail(ctx, length);
                     return null;
                 }
@@ -119,6 +127,8 @@ public class LineBasedFrameDecoder extends ByteToMessageDecoder {
                 return frame;
             } else {
                 final int length = buffer.readableBytes();
+                // 超过了max限制, 但是还是没读到结束的标识.
+                // 标记buffer, 并记录discarding为true
                 if (length > maxLength) {
                     discardedBytes = length;
                     buffer.readerIndex(buffer.writerIndex());
@@ -128,19 +138,23 @@ public class LineBasedFrameDecoder extends ByteToMessageDecoder {
                         fail(ctx, "over " + discardedBytes);
                     }
                 }
+                // 没读到结束标识并且没有超出max限制, 返回null, 下次再读.
                 return null;
             }
         } else {
             if (eol >= 0) {
+                // 已经标记了discarding并在此时读到了结束标识, 废弃这部分数据.
                 final int length = discardedBytes + eol - buffer.readerIndex();
                 final int delimLength = buffer.getByte(eol) == '\r'? 2 : 1;
                 buffer.readerIndex(eol + delimLength);
                 discardedBytes = 0;
                 discarding = false;
                 if (!failFast) {
+                    // 不是快速失败, 则此时触发fail
                     fail(ctx, length);
                 }
             } else {
+                // 还是没读到结束的标识, 继续重新标记readIndex并累加
                 discardedBytes += buffer.readableBytes();
                 buffer.readerIndex(buffer.writerIndex());
                 // We skip everything in the buffer, we need to set the offset to 0 again.

@@ -104,6 +104,7 @@ public abstract class MessageToByteEncoder<I> extends ChannelOutboundHandlerAdap
                 I cast = (I) msg;
                 buf = allocateBuffer(ctx, cast, preferDirect);
                 try {
+                    // 将msg写到buf中
                     encode(ctx, cast, buf);
                 } finally {
                     ReferenceCountUtil.release(cast);
