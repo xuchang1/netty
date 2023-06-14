@@ -32,6 +32,7 @@ public abstract class AbstractFuture<V> implements Future<V> {
         await();
 
         Throwable cause = cause();
+        // 没有异常, 直接get结果
         if (cause == null) {
             return getNow();
         }
