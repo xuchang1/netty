@@ -1036,6 +1036,7 @@ public final class PlatformDependent {
      * consumer (one thread!).
      * @return A MPSC queue which may be unbounded.
      */
+    // 多生产者, 单个消费者的线程安全的queue
     public static <T> Queue<T> newMpscQueue() {
         return Mpsc.newMpscQueue();
     }
